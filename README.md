@@ -9,13 +9,16 @@ All logic is separated in .CGinc files and included into the shadercode
 
 Features:
 
--Various methods to turn Unity's PBR lighting to NPR and completely create a flat Lighting without sacrificing Depth.
--Control of how many on Level the NPR conversion is done.
--Support for ORM Textures for control of Roughness,Occlussion and Metalic.
--Control of an extra pass of Flattening the PBR lighting further using a extra pass.
+- Various methods to turn Unity's PBR lighting to NPR and completely create a flat Lighting without sacrificing Depth.
 
-Very lightweight for fast compiling on build by limiting the amount of textures needed.
+- Control of how many on Level the NPR conversion is done.
 
+- Support for ORM Textures for control of Roughness,Occlussion and Metalic.
+
+- Control of an extra pass of Flattening the PBR lighting further using a extra pass.
+
+- Very lightweight for fast compiling on build by limiting the amount of textures needed.
+  
 - Same Look with and without scene lighting due to the unlit nature of the shader with some passes being lit.
 
 No Scene Lighting: 
