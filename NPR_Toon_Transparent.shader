@@ -1,10 +1,24 @@
-Shader "Fiochi/NPR_Toon_Cutout_Transparent"
+Shader "Fiochi/NPR_Toon_Transparent"
 {
     Properties
     {
+		[Header(Main Settings)]
+		
         _MainTex("Texture", 2D) = "white" {}
         _MainColor("Main Color", Color) = (0.5, 0.5, 0.5, 1)
         _MainColorEmission("Main Color Emission", Color) = (0, 0, 0, 0)
+		_EmissionMask("Emission Mask", 2D) = "white" {}
+		
+		[Header(NPR Lighting)]
+		
+        _NPRLightIntensity("NPR Light Intensity", Float) = 1
+		[Toggle(_USEFLATTENING)] _USEFLATTENING ("Use Lighting Flattening", Float) = 0
+        _FlatteningIntensity("Flattening Intensity", Range(0, 1)) = 1.0
+        _FlatteningColor("Flattening Color", Color) = (0, 0, 0, 1)
+        _FlatteningLevel("Flattening Level", Range(1, 20)) = 1
+		
+		[Header(Outline Settings)]
+		
         _OutlineColor("Outline Color", Color) = (0, 0, 0, 1)
         _OutlineThickness("Outline Thickness", Range(0, 0.1)) = 0.01
         _ShadingLevels("Shading Levels", Range(1, 1024)) = 3
@@ -12,20 +26,22 @@ Shader "Fiochi/NPR_Toon_Cutout_Transparent"
         [Toggle(_UseOutlineDistanceScale)] _UseOutlineDistanceScale("Use Outline Distance Scale", Float) = 0
         _MinOutlineScale("Min Outline Scale", Float) = 0.5
         _MaxOutlineScale("Max Outline Scale", Float) = 1.5
+		
+		[Header(Normal Map Settings)]
+		
         _NormalMap("Normal Map", 2D) = "bump" {}
         _NormalMapIntensity("Normal Map Intensity", Float) = 1
         [KeywordEnum(None, Box, Gaussian)] _NormalBlurMethod("Normal Blur Method", Int) = 0
         _NormalBlurRadius("Normal Blur Radius", Range(1, 10)) = 1
-        _PackedTexture("Packed Texture", 2D) = "white" {}
+		
+		[Header(ORM Settings)]
+		
+        _PackedTexture("ORM", 2D) = "white" {}
         _OcclusionChannel("Occlusion Channel", Range(0, 3)) = 0
         _RoughnessChannel("Roughness Channel", Range(0, 3)) = 1
         _MetalnessChannel("MetalnessChannel", Range(0, 3)) = 2
-        _Cutoff("Alpha Cutoff", Range(0, 1)) = 0.5
 		
-		[Toggle(_USEFLATTENING)] _USEFLATTENING ("Use Lighting Flattening", Float) = 0
-        _FlatteningIntensity("Flattening Intensity", Range(0, 1)) = 1.0
-        _FlatteningColor("Flattening Color", Color) = (0, 0, 0, 1)
-        _FlatteningLevel("Flattening Level", Range(1, 20)) = 1
+
     }
 
     SubShader
@@ -91,6 +107,8 @@ Shader "Fiochi/NPR_Toon_Cutout_Transparent"
 			float _FlatteningIntensity;
 			fixed4 _FlatteningColor;
 			float _FlatteningLevel;
+			
+			sampler2D _EmissionMask;
 
             v2f vert(appdata v)
             {
@@ -121,7 +139,7 @@ Shader "Fiochi/NPR_Toon_Cutout_Transparent"
                   #endif
 
                  float3 normal = normalize(mul(tbn, normalMap).xyz) * _NormalMapIntensity;
-                  float3 viewDir = normalize(_WorldSpaceCameraPos.xyz - i.worldPos);
+                 float3 viewDir = normalize(_WorldSpaceCameraPos.xyz - i.worldPos);
 					
                 col *= lerp(1, _MainColor, 0.2) * baseColor;
 
@@ -130,22 +148,25 @@ Shader "Fiochi/NPR_Toon_Cutout_Transparent"
                  float diffuse = max(0, dot(normal, lightDir));
                 int shadingLevels = (int)_ShadingLevels;
                  float stepSize = 1.0 / shadingLevels;
-                float discreteDiffuse = floor(diffuse / stepSize) * stepSize;
+                 float discreteDiffuse = floor(diffuse / stepSize) * stepSize;
 
-                 fixed4 litColor = fixed4(tex2D(_MainTex, i.uv).rgb * facing * step(0.001, discreteDiffuse) * _NPRLightIntensity, 1.0);
+                fixed4 litColor = fixed4(tex2D(_MainTex, i.uv).rgb * facing * step(0.001, discreteDiffuse) * _NPRLightIntensity, 1.0);
 
-                // --- MODIFIED EMISSION START ---
+                 // Ambient light calculation (using unity ambient)
+				float3 ambient = UNITY_LIGHTMODEL_AMBIENT.rgb;
+				fixed4 ambientColor = fixed4(ambient, 1.0);
+
+                 // --- MODIFIED EMISSION START ---
                 // Use the main texture color directly for emission but multiplied by _MainColorEmission
                 fixed4 emissionColor = tex2D(_MainTex, i.uv) * _MainColorEmission;
+				 // Apply mask
+                float emissionMask = tex2D(_EmissionMask, i.uv).r;
+                emissionColor.rgb *= emissionMask;
                  // --- MODIFIED EMISSION END ---
 
                 float textureAlpha = tex2D(_MainTex, i.uv).a;
 				
-				// Ambient light calculation (using unity ambient)
-                float3 ambient = UNITY_LIGHTMODEL_AMBIENT.rgb;
-                fixed4 ambientColor = fixed4(ambient, 1.0);
-
-				fixed4 finalColor = (col + litColor + emissionColor);
+				fixed4 finalColor = (col + litColor + emissionColor) ;
                 finalColor.rgb += ambientColor.rgb;
 				   
 				#if _USEFLATTENING
@@ -155,64 +176,64 @@ Shader "Fiochi/NPR_Toon_Cutout_Transparent"
                  if (textureAlpha < _Cutoff)
                         discard;
 
-                 return fixed4(finalColor.rgb, textureAlpha * _MainColor.a);
-              }
-              ENDCG
-           }
-
-           Pass // Outline Pass
-           {
-                Cull Front
-                ZWrite Off
-                Blend SrcAlpha OneMinusSrcAlpha
-                AlphaTest Greater 0
-
-                CGPROGRAM
-                #pragma vertex vert
-                #pragma fragment frag
-
-                #include "UnityCG.cginc"
-
-                struct appdata
-                {
-                    float4 vertex : POSITION;
-                   float3 normal : NORMAL;
-                };
-
-               struct v2f
-                {
-                   float4 vertex : SV_POSITION;
-                    float3 worldPos : TEXCOORD0;
-                    float3 normal : TEXCOORD1;
-                };
-
-                fixed4 _OutlineColor;
-                float _OutlineThickness;
-                float _OutlineDistanceScale;
-                float _UseOutlineDistanceScale;
-                float _MinOutlineScale;
-                float _MaxOutlineScale;
-
-                v2f vert(appdata v)
-                {
-                   v2f o;
-                    o.worldPos = mul(unity_ObjectToWorld, v.vertex).xyz;
-
-                    float distance = length(o.worldPos - _WorldSpaceCameraPos);
-                    float distanceScale = (1 - saturate(distance * _OutlineDistanceScale));
-                    float scale = lerp(_MinOutlineScale, _MaxOutlineScale, distanceScale);
-
-                   o.vertex = UnityObjectToClipPos(v.vertex + v.normal * (_OutlineThickness * lerp(1, scale, _UseOutlineDistanceScale)));
-                    o.normal = UnityObjectToWorldNormal(v.normal);
-                    return o;
-               }
-
-                fixed4 frag(v2f i) : SV_Target
-                {
-                    return _OutlineColor;
-                }
-                ENDCG
-            }
+                return fixed4(finalColor.rgb, textureAlpha * _MainColor.a);
+             }
+             ENDCG
         }
-        Fallback "Unlit/Color"
+
+        Pass // Outline Pass
+        {
+            Cull Front
+            ZWrite Off
+            Blend SrcAlpha OneMinusSrcAlpha
+            AlphaTest Greater 0
+
+            CGPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+
+            #include "UnityCG.cginc"
+
+            struct appdata
+            {
+               float4 vertex : POSITION;
+                float3 normal : NORMAL;
+           };
+
+            struct v2f
+            {
+                float4 vertex : SV_POSITION;
+                float3 worldPos : TEXCOORD0;
+                float3 normal : TEXCOORD1;
+            };
+
+            fixed4 _OutlineColor;
+            float _OutlineThickness;
+            float _OutlineDistanceScale;
+            float _UseOutlineDistanceScale;
+            float _MinOutlineScale;
+            float _MaxOutlineScale;
+
+           v2f vert(appdata v)
+           {
+                v2f o;
+                o.worldPos = mul(unity_ObjectToWorld, v.vertex).xyz;
+
+                float distance = length(o.worldPos - _WorldSpaceCameraPos);
+               float distanceScale = (1 - saturate(distance * _OutlineDistanceScale));
+               float scale = lerp(_MinOutlineScale, _MaxOutlineScale, distanceScale);
+
+                o.vertex = UnityObjectToClipPos(v.vertex + v.normal * (_OutlineThickness * lerp(1, scale, _UseOutlineDistanceScale)));
+               o.normal = UnityObjectToWorldNormal(v.normal);
+               return o;
+            }
+
+           fixed4 frag(v2f i) : SV_Target
+            {
+               return _OutlineColor;
+            }
+            ENDCG
+        }
     }
+    Fallback "Unlit/Color"
+}

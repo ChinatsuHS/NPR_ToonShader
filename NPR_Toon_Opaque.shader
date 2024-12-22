@@ -1,11 +1,24 @@
-Shader "Fiochi/NPR_Toon_Cutout_Opaque"
+Shader "Fiochi/NPR_Toon_Opaque"
 {
     Properties
     {
+		[Header(Main Settings)]
+		[Space]
         _MainTex("Texture", 2D) = "white" {}
         _MainColor("Main Color", Color) = (0.5, 0.5, 0.5, 1)
         _MainColorEmission("Main Color Emission", Color) = (0, 0, 0, 0)
+		_EmissionMask("Emission Mask", 2D) = "white" {}
+		
+		[Header(NPR Lighting)]
+		[Space]
         _NPRLightIntensity("NPR Light Intensity", Float) = 1
+		[Toggle(_USEFLATTENING)] _USEFLATTENING ("Use Lighting Flattening", Float) = 0
+        _FlatteningIntensity("Flattening Intensity", Range(0, 1)) = 1.0
+        _FlatteningColor("Flattening Color", Color) = (0, 0, 0, 1)
+        _FlatteningLevel("Flattening Level", Range(1, 20)) = 1
+		
+		[Header(Outline Settings)]
+		[Space]
         _OutlineColor("Outline Color", Color) = (0, 0, 0, 1)
         _OutlineThickness("Outline Thickness", Range(0, 0.1)) = 0.01
         _ShadingLevels("Shading Levels", Range(1, 1024)) = 3
@@ -13,25 +26,27 @@ Shader "Fiochi/NPR_Toon_Cutout_Opaque"
         [Toggle(_UseOutlineDistanceScale)] _UseOutlineDistanceScale("Use Outline Distance Scale", Float) = 0
         _MinOutlineScale("Min Outline Scale", Float) = 0.5
         _MaxOutlineScale("Max Outline Scale", Float) = 1.5
+		
+		[Header(Normal Map Settings)]
+		[Space]
         _NormalMap("Normal Map", 2D) = "bump" {}
         _NormalMapIntensity("Normal Map Intensity", Float) = 1
         [KeywordEnum(None, Box, Gaussian)] _NormalBlurMethod("Normal Blur Method", Int) = 0
         _NormalBlurRadius("Normal Blur Radius", Range(1, 10)) = 1
-        _PackedTexture("Packed Texture", 2D) = "white" {}
+		
+		[Header(ORM Settings)]
+		[Space]
+        _PackedTexture("ORM", 2D) = "white" {}
         _OcclusionChannel("Occlusion Channel", Range(0, 3)) = 0
         _RoughnessChannel("Roughness Channel", Range(0, 3)) = 1
         _MetalnessChannel("MetalnessChannel", Range(0, 3)) = 2
-        _Cutoff("Alpha Cutoff", Range(0, 1)) = 0.5
 		
-		[Toggle(_USEFLATTENING)] _USEFLATTENING ("Use Lighting Flattening", Float) = 0
-        _FlatteningIntensity("Flattening Intensity", Range(0, 1)) = 1.0
-        _FlatteningColor("Flattening Color", Color) = (0, 0, 0, 1)
-        _FlatteningLevel("Flattening Level", Range(1, 20)) = 1
+
     }
 
     SubShader
     {
-        Tags { "RenderType" = "Opaque" "Queue" = "AlphaTest" }
+        Tags { "RenderType" = "Opaque" "Queue" = "Geometry" }
         LOD 100
 
         Pass // Main Rendering Pass
@@ -90,6 +105,8 @@ Shader "Fiochi/NPR_Toon_Cutout_Opaque"
 			float _FlatteningIntensity;
 			fixed4 _FlatteningColor;
 			float _FlatteningLevel;
+			
+			sampler2D _EmissionMask;
 
             v2f vert(appdata v)
             {
@@ -132,19 +149,23 @@ Shader "Fiochi/NPR_Toon_Cutout_Opaque"
                 float3 lightDir = normalize(_WorldSpaceLightPos0.xyz);
                 float facing = max(0, dot(normal, viewDir));
                 float diffuse = max(0, dot(normal, lightDir));
-				
-				// Ambient light calculation (using unity ambient)
-				float3 ambient = UNITY_LIGHTMODEL_AMBIENT.rgb;
-				fixed4 ambientColor = fixed4(ambient, 1.0);
                 int shadingLevels = (int)_ShadingLevels;
                 float stepSize = 1.0 / shadingLevels;
                 float discreteDiffuse = floor(diffuse / stepSize) * stepSize;
 
-                fixed4 litColor = fixed4(tex2D(_MainTex, i.uv).rgb * saturate(diffuse) * _NPRLightIntensity, col.a);
+                fixed4 litColor = fixed4(tex2D(_MainTex, i.uv).rgb * facing * step(0.001, discreteDiffuse) * _NPRLightIntensity, col.a);
+				
+                // Ambient light calculation (using unity ambient)
+				float3 ambient = UNITY_LIGHTMODEL_AMBIENT.rgb;
+				fixed4 ambientColor = fixed4(ambient, 1.0);
 
                 // --- MODIFIED EMISSION START ---
                 // Use the main texture color directly for emission but multiplied by _MainColorEmission
                  fixed4 emissionColor = tex2D(_MainTex, i.uv) * _MainColorEmission;
+                // Apply mask
+                float emissionMask = tex2D(_EmissionMask, i.uv).r;
+                emissionColor.rgb *= emissionMask;
+				
                 // --- MODIFIED EMISSION END ---
 				   
 				fixed4 finalColor = (col + litColor + emissionColor) ;
@@ -153,10 +174,6 @@ Shader "Fiochi/NPR_Toon_Cutout_Opaque"
 				#if _USEFLATTENING
 					finalColor = ApplyLightingFlattening(_MainTex, i.uv, _FlatteningColor, _FlatteningIntensity, _FlatteningLevel, emissionColor, baseColor, col, litColor);
 				#endif
-
-                if(col.a < _Cutoff)
-                    discard;
-
                 return finalColor;
             }
             ENDCG
