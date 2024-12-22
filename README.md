@@ -1,4 +1,6 @@
-![image](https://github.com/user-attachments/assets/3a1f13dd-d44c-498c-ac6b-4a3da892352c)
+![image](https://github.com/user-attachments/assets/3a1f13dd-d44c-498c-ac6b-4a3da892352c) ![VRChat_2024-12-22_03-04-55 211_1920x1080](https://github.com/user-attachments/assets/a048dd48-280e-42d6-97e3-791d94ca37f3) 
+![VRChat_2024-12-21_16-57-41 380_1920x1080](https://github.com/user-attachments/assets/66bccda0-357e-4c88-b20f-47968bc803e9)
+
 # NPR_ToonShader
 NPR Toon Shader for Build-in RenderPipeline in Unity
 
